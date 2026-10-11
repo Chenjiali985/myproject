@@ -6,24 +6,25 @@ from werkzeug.security import generate_password_hash
 from models import Admin, Category, Comment, Post, Tag, db, get_or_create
 
 
-def _post(title, slug, category, tags, summary, content, days_ago, views=0):
-    category_obj = get_or_create(Category, name=category)
-    tag_objs = [get_or_create(Tag, name=t) for t in tags]
+def _build_post(title, slug, category_name, tag_names, summary, content,
+                days_ago, views=0):
+    category_instance = get_or_create(Category, name=category_name)
+    tag_instances = [get_or_create(Tag, name=tag_name) for tag_name in tag_names]
     post = Post(
         title=title, slug=slug, summary=summary, content=content,
         created_at=datetime.now() - timedelta(days=days_ago),
-        views=views, published=True, category_id=category_obj.id)
-    post.tags = tag_objs
+        views=views, published=True, category_id=category_instance.id)
+    post.tags = tag_instances
     db.session.add(post)
     return post
 
 
-POSTS = [
+SEED_POSTS = [
     dict(
         title='Flask 入门：从零搭建一个博客应用',
         slug='flask-build-blog-from-scratch',
-        category='Web 开发',
-        tags=['Flask', 'Python'],
+        category_name='Web 开发',
+        tag_names=['Flask', 'Python'],
         summary='用最少的代码理解 Flask 的核心概念：路由、模板、ORM 与项目组织方式，一步步搭出属于自己的博客。',
         days_ago=2, views=358,
         content='''## 为什么要自己搭博客
@@ -87,8 +88,8 @@ class Post(db.Model):
     dict(
         title='Python 装饰器完全指南',
         slug='python-decorator-guide',
-        category='Python',
-        tags=['Python', '进阶'],
+        category_name='Python',
+        tag_names=['Python', '进阶'],
         summary='从函数是一等公民讲起，用 5 个渐进式例子彻底搞懂装饰器，包括带参数装饰器与 functools.wrap。',
         days_ago=6, views=512,
         content='''## 函数是对象
@@ -161,8 +162,8 @@ def fetch():
     dict(
         title='SQLite 在小型项目中的实践',
         slug='sqlite-in-small-projects',
-        category='数据库',
-        tags=['SQLite', '数据库设计'],
+        category_name='数据库',
+        tag_names=['SQLite', '数据库设计'],
         summary='单文件、零配置的 SQLite 是个人项目和原型的最佳选择，这篇文章总结它的适用边界与实用技巧。',
         days_ago=11, views=187,
         content='''## 为什么选 SQLite
@@ -210,8 +211,8 @@ EXPLAIN QUERY PLAN SELECT * FROM post WHERE slug = 'python-decorator-guide';
     dict(
         title='用 Markdown 高效写作',
         slug='write-efficiently-with-markdown',
-        category='工具与效率',
-        tags=['Markdown', '写作'],
+        category_name='工具与效率',
+        tag_names=['Markdown', '写作'],
         summary='Markdown 让你专注内容本身。本文整理最常用的语法与写作工作流，并附上速查表。',
         days_ago=16, views=264,
         content='''## 为什么是 Markdown
@@ -249,8 +250,8 @@ print('hello markdown')
     dict(
         title='生成器与协程：Python 迭代的进阶之路',
         slug='python-generator-and-coroutine',
-        category='Python',
-        tags=['Python', '异步编程'],
+        category_name='Python',
+        tag_names=['Python', '异步编程'],
         summary='从 yield 到 async/await，理清生成器、迭代器与协程之间的关系，写出更省内存的代码。',
         days_ago=22, views=301,
         content='''## 生成器：惰性求值
@@ -314,8 +315,8 @@ asyncio.run(main())
     dict(
         title='CSS Grid 布局快速上手',
         slug='css-grid-quick-start',
-        category='Web 开发',
-        tags=['CSS', '前端'],
+        category_name='Web 开发',
+        tag_names=['CSS', '前端'],
         summary='用 10 分钟学会 CSS Grid 的核心概念：容器、轨道、区域与响应式布局，告别 Float 时代。',
         days_ago=28, views=221,
         content='''## 两行代码实现响应式卡片
@@ -359,8 +360,8 @@ asyncio.run(main())
     dict(
         title='Git 常用命令备忘录',
         slug='git-cheat-sheet',
-        category='工具与效率',
-        tags=['Git', '效率工具'],
+        category_name='工具与效率',
+        tag_names=['Git', '效率工具'],
         summary='把最常用、最容易忘的 Git 命令整理成一页备忘录：撤销、回退、分支、暂存与排查问题。',
         days_ago=35, views=431,
         content='''## 日常提交
@@ -408,8 +409,8 @@ git config --global alias.lg "log --oneline --graph --all"
     dict(
         title='我的 2026 开发环境清单',
         slug='my-2026-dev-setup',
-        category='随笔',
-        tags=['工具', '随笔'],
+        category_name='随笔',
+        tag_names=['工具', '随笔'],
         summary='记录目前每天在用的开发工具与配置习惯，原则只有一条：少即是多。',
         days_ago=42, views=156,
         content='''## 原则
@@ -447,7 +448,7 @@ fzf
 环境是为工作服务的。与其折腾配置，不如把时间花在写出更好的代码上。'''),
 ]
 
-COMMENTS = [
+SEED_COMMENTS = [
     ('flask-build-blog-from-scratch', '小白', '跟着写了一遍，终于把博客跑起来了，感谢分享！'),
     ('flask-build-blog-from-scratch', 'Ray', '建议补一讲部署到云服务器的部分。'),
     ('python-decorator-guide', 'Momo', '装饰器执行顺序那个坑我踩过，自下而上记住了。'),
@@ -463,10 +464,10 @@ def seed_if_empty():
         password_hash=generate_password_hash(
             os.environ.get('ADMIN_PASSWORD', 'admin123'))))
 
-    for item in POSTS:
-        _post(**item)
+    for item in SEED_POSTS:
+        _build_post(**item)
 
-    for slug, name, content in COMMENTS:
+    for slug, name, content in SEED_COMMENTS:
         post = Post.query.filter_by(slug=slug).first()
         if post:
             db.session.add(Comment(post_id=post.id, name=name, content=content))

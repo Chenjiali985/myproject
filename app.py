@@ -34,7 +34,7 @@ def create_app():
         db.create_all()
         seed_if_empty()
 
-    def paginated_posts(extra_filter=None):
+    def get_paginated_posts(extra_filter=None):
         query = Post.query.filter_by(published=True)
         if extra_filter is not None:
             query = query.filter(extra_filter)
@@ -43,7 +43,7 @@ def create_app():
             per_page=app.config['POSTS_PER_PAGE'],
             error_out=False)
 
-    def unique_slug(base, exclude_id=None):
+    def generate_unique_slug(base, exclude_id=None):
         slug, i = base, 2
         while True:
             query = Post.query.filter_by(slug=slug)
@@ -54,31 +54,33 @@ def create_app():
             slug = f'{base}-{i}'
             i += 1
 
-    def fill_post_from_form(post):
+    def populate_post_from_form(post):
         post.title = request.form['title'].strip()
-        post.content = request.form.get('content', '').replace('\r\n', '\n')
+        post.content = (request.form.get('content', '')
+                        .replace('\r\n', '\n').replace('\r', '\n'))
         post.summary = request.form.get('summary', '').strip() or None
         post.published = request.form.get('published') == 'on'
-        slug = sanitize_slug(request.form.get('slug'))
-        if slug:
-            post.slug = slug
-        new_cat = request.form.get('new_category', '').strip()
-        if new_cat:
-            category = get_or_create(Category, name=new_cat)
+        form_slug = sanitize_slug(request.form.get('slug'))
+        if form_slug:
+            post.slug = form_slug
+        new_category_name = request.form.get('new_category', '').strip()
+        if new_category_name:
+            category = get_or_create(Category, name=new_category_name)
         else:
-            cid = request.form.get('category_id', type=int)
-            category = db.session.get(Category, cid) if cid else None
+            form_category_id = request.form.get('category_id', type=int)
+            category = (db.session.get(Category, form_category_id)
+                        if form_category_id else None)
         raw_tags = request.form.get('tags', '')
-        names = [n for n in (s.strip() for s in re.split(r'[,，]', raw_tags)) if n]
-        tags = [get_or_create(Tag, name=n) for n in names]
+        tag_names = [name for name in
+                     (s.strip() for s in re.split(r'[,，]', raw_tags)) if name]
         post.category_id = category.id if category else None
-        post.tags = tags
+        post.tags = [get_or_create(Tag, name=name) for name in tag_names]
 
     # ---------------- 公开页面 ----------------
 
     @app.route('/')
     def index():
-        p = paginated_posts()
+        p = get_paginated_posts()
         return render_template('list.html', posts=p.items, pagination=p,
                                endpoint='index', title='最新文章',
                                subtitle=None, kwargs={})
@@ -96,7 +98,7 @@ def create_app():
     @app.route('/category/<name>')
     def category(name):
         cat = Category.query.filter_by(name=name).first_or_404()
-        p = paginated_posts(Post.category_id == cat.id)
+        p = get_paginated_posts(Post.category_id == cat.id)
         return render_template('list.html', posts=p.items, pagination=p,
                                endpoint='category', title=f'分类：{name}',
                                subtitle=None, kwargs={'name': name})
@@ -104,7 +106,7 @@ def create_app():
     @app.route('/tag/<name>')
     def tag(name):
         t = Tag.query.filter_by(name=name).first_or_404()
-        p = paginated_posts(Post.tags.contains(t))
+        p = get_paginated_posts(Post.tags.contains(t))
         return render_template('list.html', posts=p.items, pagination=p,
                                endpoint='tag', title=f'标签：{name}',
                                subtitle=None, kwargs={'name': name})
@@ -134,7 +136,7 @@ def create_app():
                 page=request.args.get('page', 1, type=int),
                 per_page=app.config['POSTS_PER_PAGE'], error_out=False)
         else:
-            p = paginated_posts()
+            p = get_paginated_posts()
         return render_template(
             'list.html', posts=p.items, pagination=p, endpoint='search',
             title=f'搜索：{q}' if q else '搜索',
@@ -200,13 +202,13 @@ def create_app():
             if not title or not content:
                 flash('标题和内容不能为空', 'error')
             else:
-                post = Post(title=title)
-                fill_post_from_form(post)
+                post = Post()
+                populate_post_from_form(post)
                 db.session.add(post)
                 base = (sanitize_slug(request.form.get('slug'))
                         or sanitize_slug(title)
                         or datetime.now().strftime('%Y%m%d%H%M%S'))
-                post.slug = unique_slug(base)
+                post.slug = generate_unique_slug(base)
                 db.session.commit()
                 flash('文章已创建', 'success')
                 return redirect(url_for('admin_dashboard'))
@@ -221,11 +223,11 @@ def create_app():
         if post is None:
             abort(404)
         if request.method == 'POST':
-            fill_post_from_form(post)
+            populate_post_from_form(post)
             base = sanitize_slug(request.form.get('slug')) or sanitize_slug(post.title)
             if not base:
                 base = f'post-{post.id}'
-            post.slug = unique_slug(base, exclude_id=post.id)
+            post.slug = generate_unique_slug(base, exclude_id=post.id)
             db.session.commit()
             flash('文章已更新', 'success')
             return redirect(url_for('admin_dashboard'))
