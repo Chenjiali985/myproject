@@ -98,6 +98,39 @@ def populate_post_from_form(post):
     post.tags = [get_or_create(Tag, name=name) for name in tag_names]
 
 
+def get_post_or_404(post_id):
+    """按主键查文章，不存在则抛 404（后台各操作共用）"""
+    post = db.session.get(Post, post_id)
+    if post is None:
+        abort(404)
+    return post
+
+
+def validate_post_form():
+    """校验文章表单必填项，返回 (ok, error_message)"""
+    title = request.form.get('title', '').strip()
+    content = request.form.get('content', '').strip()
+    if not title or not content:
+        return False, '标题和内容不能为空'
+    return True, ''
+
+
+def save_post_from_form(post, exclude_id=None):
+    """校验表单 → 填充字段 → 统一 slug 回退 → 提交。返回是否成功"""
+    ok, error_msg = validate_post_form()
+    if not ok:
+        flash(error_msg, 'error')
+        return False
+    populate_post_from_form(post)
+    db.session.add(post)
+    base = (sanitize_slug(request.form.get('slug'))
+            or sanitize_slug(post.title)
+            or datetime.now().strftime('%Y%m%d%H%M%S'))
+    post.slug = generate_unique_slug(base, exclude_id=exclude_id)
+    db.session.commit()
+    return True
+
+
 # ---------------- 侧栏数据查询（单一职责，聚合查询避免 N+1） ----------------
 
 def query_nav_categories():
@@ -206,9 +239,7 @@ def create_app():
 
     @app.route('/comment/<int:post_id>', methods=['POST'])
     def add_comment(post_id):
-        post = db.session.get(Post, post_id)
-        if post is None:
-            abort(404)
+        post = get_post_or_404(post_id)
         name = request.form.get('name', '').strip()
         content = request.form.get('content', '').strip()
         if not name or not content:
@@ -254,19 +285,8 @@ def create_app():
     @login_required
     def post_new():
         if request.method == 'POST':
-            title = request.form.get('title', '').strip()
-            content = request.form.get('content', '').strip()
-            if not title or not content:
-                flash('标题和内容不能为空', 'error')
-            else:
-                post = Post()
-                populate_post_from_form(post)
-                db.session.add(post)
-                base = (sanitize_slug(request.form.get('slug'))
-                        or sanitize_slug(title)
-                        or datetime.now().strftime('%Y%m%d%H%M%S'))
-                post.slug = generate_unique_slug(base)
-                db.session.commit()
+            post = Post()
+            if save_post_from_form(post):
                 flash('文章已创建', 'success')
                 return redirect(url_for('admin_dashboard'))
         return render_template('admin/post_form.html', post=None,
@@ -276,18 +296,11 @@ def create_app():
     @app.route('/admin/post/<int:post_id>/edit', methods=['GET', 'POST'])
     @login_required
     def post_edit(post_id):
-        post = db.session.get(Post, post_id)
-        if post is None:
-            abort(404)
+        post = get_post_or_404(post_id)
         if request.method == 'POST':
-            populate_post_from_form(post)
-            base = sanitize_slug(request.form.get('slug')) or sanitize_slug(post.title)
-            if not base:
-                base = f'post-{post.id}'
-            post.slug = generate_unique_slug(base, exclude_id=post.id)
-            db.session.commit()
-            flash('文章已更新', 'success')
-            return redirect(url_for('admin_dashboard'))
+            if save_post_from_form(post, exclude_id=post.id):
+                flash('文章已更新', 'success')
+                return redirect(url_for('admin_dashboard'))
         return render_template('admin/post_form.html', post=post,
                                categories=Category.query.order_by(Category.name).all(),
                                title='编辑文章')
@@ -295,9 +308,7 @@ def create_app():
     @app.route('/admin/post/<int:post_id>/toggle', methods=['POST'])
     @login_required
     def toggle_post_publish(post_id):
-        post = db.session.get(Post, post_id)
-        if post is None:
-            abort(404)
+        post = get_post_or_404(post_id)
         post.published = not post.published
         db.session.commit()
         flash('文章已' + ('发布' if post.published else '下线'), 'success')
@@ -306,9 +317,7 @@ def create_app():
     @app.route('/admin/post/<int:post_id>/delete', methods=['POST'])
     @login_required
     def post_delete(post_id):
-        post = db.session.get(Post, post_id)
-        if post is None:
-            abort(404)
+        post = get_post_or_404(post_id)
         db.session.delete(post)
         db.session.commit()
         flash('文章已删除', 'success')

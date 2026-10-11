@@ -21,8 +21,13 @@ def get_or_create(model, **kwargs):
     return obj
 
 
-class Category(db.Model):
+class BaseModel(db.Model):
+    """抽象基类：统一 id 主键，消除样板重复"""
+    __abstract__ = True
     id = db.Column(db.Integer, primary_key=True)
+
+
+class Category(BaseModel):
     name = db.Column(db.String(50), unique=True, nullable=False)
     posts = db.relationship('Post', backref=db.backref('category'),
                             lazy='dynamic')
@@ -36,16 +41,14 @@ post_tag_table = db.Table(
 )
 
 
-class Tag(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+class Tag(BaseModel):
     name = db.Column(db.String(50), unique=True, nullable=False)
     posts = db.relationship('Post', secondary=post_tag_table,
                             backref=db.backref('tags', lazy='joined'),
                             lazy='dynamic')
 
 
-class Post(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+class Post(BaseModel):
     title = db.Column(db.String(200), nullable=False)
     slug = db.Column(db.String(200), unique=True, nullable=False)
     summary = db.Column(db.Text)
@@ -64,15 +67,13 @@ class Post(db.Model):
         return render_markdown(self.content)
 
 
-class Comment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+class Comment(BaseModel):
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
     name = db.Column(db.String(50), nullable=False)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=local_now, nullable=False)
 
 
-class Admin(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+class Admin(BaseModel):
     username = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)

@@ -12,5 +12,4 @@ class Config:
                       stacklevel=2)
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         'DATABASE_URL', 'sqlite:///' + os.path.join(BASE_DIR, 'blog.db'))
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
     POSTS_PER_PAGE = 6
