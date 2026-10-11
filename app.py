@@ -2,12 +2,14 @@ import functools
 import re
 from datetime import datetime
 
-from flask import (Flask, abort, flash, redirect, render_template, request,
-                   session, url_for)
+from flask import (Flask, abort, current_app, flash, redirect,
+                   render_template, request, session, url_for)
+from sqlalchemy import and_, func
 from werkzeug.security import check_password_hash
 
 from config import Config
-from models import Admin, Category, Comment, Post, Tag, db, get_or_create
+from models import (Admin, Category, Comment, Post, Tag, db, get_or_create,
+                    post_tag_table)
 from seed_data import seed_if_empty
 
 
@@ -25,56 +27,115 @@ def sanitize_slug(raw):
     return re.sub(r'[^\w-]+', '-', (raw or '').strip()).strip('-').lower()
 
 
-def create_app():
-    app = Flask(__name__)
-    app.config.from_object(Config)
-    db.init_app(app)
-
+def init_db(app):
+    """建表 + 空库时灌入种子数据（仅在应用启动时执行一次）"""
     with app.app_context():
         db.create_all()
         seed_if_empty()
 
-    def get_paginated_posts(extra_filter=None):
-        query = Post.query.filter_by(published=True)
-        if extra_filter is not None:
-            query = query.filter(extra_filter)
-        return query.order_by(Post.created_at.desc()).paginate(
-            page=request.args.get('page', 1, type=int),
-            per_page=app.config['POSTS_PER_PAGE'],
-            error_out=False)
 
-    def generate_unique_slug(base, exclude_id=None):
-        slug, i = base, 2
-        while True:
-            query = Post.query.filter_by(slug=slug)
-            if exclude_id:
-                query = query.filter(Post.id != exclude_id)
-            if query.first() is None:
-                return slug
-            slug = f'{base}-{i}'
-            i += 1
+# ---------------- 可复用的查询/工具函数（模块级，可独立测试） ----------------
 
-    def populate_post_from_form(post):
-        post.title = request.form['title'].strip()
-        post.content = (request.form.get('content', '')
-                        .replace('\r\n', '\n').replace('\r', '\n'))
-        post.summary = request.form.get('summary', '').strip() or None
-        post.published = request.form.get('published') == 'on'
-        form_slug = sanitize_slug(request.form.get('slug'))
-        if form_slug:
-            post.slug = form_slug
-        new_category_name = request.form.get('new_category', '').strip()
-        if new_category_name:
-            category = get_or_create(Category, name=new_category_name)
-        else:
-            form_category_id = request.form.get('category_id', type=int)
-            category = (db.session.get(Category, form_category_id)
-                        if form_category_id else None)
-        raw_tags = request.form.get('tags', '')
-        tag_names = [name for name in
-                     (s.strip() for s in re.split(r'[,，]', raw_tags)) if name]
-        post.category_id = category.id if category else None
-        post.tags = [get_or_create(Tag, name=name) for name in tag_names]
+def paginate_query(query, page, per_page):
+    """纯分页逻辑：与 Flask 请求上下文解耦"""
+    return query.paginate(page=page, per_page=per_page, error_out=False)
+
+
+def get_paginated_posts(extra_filter=None):
+    """已发布文章的分页查询（读取当前请求页码与站点配置）"""
+    query = Post.query.filter_by(published=True)
+    if extra_filter is not None:
+        query = query.filter(extra_filter)
+    query = query.order_by(Post.created_at.desc())
+    return paginate_query(query,
+                          page=request.args.get('page', 1, type=int),
+                          per_page=current_app.config['POSTS_PER_PAGE'])
+
+
+def build_search_query(keyword):
+    """按关键词在标题/摘要/正文中做大小写不敏感模糊查询"""
+    like = f'%{keyword}%'
+    return Post.query.filter(
+        Post.published.is_(True),
+        db.or_(Post.title.ilike(like), Post.summary.ilike(like),
+               Post.content.ilike(like)))
+
+
+def generate_unique_slug(base, exclude_id=None):
+    """保证 slug 唯一，冲突时自动追加 -2、-3…"""
+    slug, i = base, 2
+    while True:
+        query = Post.query.filter_by(slug=slug)
+        if exclude_id:
+            query = query.filter(Post.id != exclude_id)
+        if query.first() is None:
+            return slug
+        slug = f'{base}-{i}'
+        i += 1
+
+
+def populate_post_from_form(post):
+    """把后台表单数据写入 Post 对象（新建/编辑共用）"""
+    post.title = request.form['title'].strip()
+    post.content = (request.form.get('content', '')
+                    .replace('\r\n', '\n').replace('\r', '\n'))
+    post.summary = request.form.get('summary', '').strip() or None
+    post.published = request.form.get('published') == 'on'
+    form_slug = sanitize_slug(request.form.get('slug'))
+    if form_slug:
+        post.slug = form_slug
+    new_category_name = request.form.get('new_category', '').strip()
+    if new_category_name:
+        category = get_or_create(Category, name=new_category_name)
+    else:
+        form_category_id = request.form.get('category_id', type=int)
+        category = (db.session.get(Category, form_category_id)
+                    if form_category_id else None)
+    raw_tags = request.form.get('tags', '')
+    tag_names = [name for name in
+                 (s.strip() for s in re.split(r'[,，]', raw_tags)) if name]
+    post.category_id = category.id if category else None
+    post.tags = [get_or_create(Tag, name=name) for name in tag_names]
+
+
+# ---------------- 侧栏数据查询（单一职责，聚合查询避免 N+1） ----------------
+
+def query_nav_categories():
+    """分类及其已发布文章数（有文章的分类才返回）"""
+    rows = (db.session.query(Category, func.count(Post.id))
+            .outerjoin(Post, and_(Post.category_id == Category.id,
+                                  Post.published.is_(True)))
+            .group_by(Category.id)
+            .order_by(Category.name).all())
+    return [(category, count) for category, count in rows if count]
+
+
+def query_tag_cloud(limit=15):
+    """标签及其已发布文章数，按数量降序取前 limit 个"""
+    rows = (db.session.query(Tag, func.count(Post.id))
+            .outerjoin(post_tag_table, Tag.id == post_tag_table.c.tag_id)
+            .outerjoin(Post, and_(Post.id == post_tag_table.c.post_id,
+                                  Post.published.is_(True)))
+            .group_by(Tag.id).all())
+    rows.sort(key=lambda item: (-item[1], item[0].name))
+    return rows[:limit]
+
+
+def query_recent_posts(limit=5):
+    return (Post.query.filter_by(published=True)
+            .order_by(Post.created_at.desc()).limit(limit).all())
+
+
+def query_top_posts(limit=5):
+    return (Post.query.filter_by(published=True)
+            .order_by(Post.views.desc()).limit(limit).all())
+
+
+def create_app():
+    app = Flask(__name__)
+    app.config.from_object(Config)
+    db.init_app(app)
+    init_db(app)
 
     # ---------------- 公开页面 ----------------
 
@@ -127,14 +188,10 @@ def create_app():
     def search():
         q = request.args.get('q', '').strip()
         if q:
-            like = f'%{q}%'
-            query = Post.query.filter(
-                Post.published.is_(True),
-                db.or_(Post.title.ilike(like), Post.summary.ilike(like),
-                       Post.content.ilike(like)))
-            p = query.order_by(Post.created_at.desc()).paginate(
-                page=request.args.get('page', 1, type=int),
-                per_page=app.config['POSTS_PER_PAGE'], error_out=False)
+            query = build_search_query(q).order_by(Post.created_at.desc())
+            p = paginate_query(
+                query, page=request.args.get('page', 1, type=int),
+                per_page=app.config['POSTS_PER_PAGE'])
         else:
             p = get_paginated_posts()
         return render_template(
@@ -237,7 +294,7 @@ def create_app():
 
     @app.route('/admin/post/<int:post_id>/toggle', methods=['POST'])
     @login_required
-    def post_toggle(post_id):
+    def toggle_post_publish(post_id):
         post = db.session.get(Post, post_id)
         if post is None:
             abort(404)
@@ -261,21 +318,11 @@ def create_app():
 
     @app.context_processor
     def inject_common():
-        cat_counts = []
-        for c in Category.query.order_by(Category.name).all():
-            n = c.posts.filter_by(published=True).count()
-            if n:
-                cat_counts.append((c, n))
-        tag_counts = sorted(
-            ((t, t.posts.filter_by(published=True).count())
-             for t in Tag.query.order_by(Tag.name).all()),
-            key=lambda item: (-item[1], item[0].name))
-        recent = (Post.query.filter_by(published=True)
-                  .order_by(Post.created_at.desc()).limit(5).all())
-        top = (Post.query.filter_by(published=True)
-               .order_by(Post.views.desc()).limit(5).all())
-        return dict(nav_categories=cat_counts, tag_cloud=tag_counts[:15],
-                    recent_posts=recent, top_posts=top)
+        """每个模板都能用：侧栏分类计数、标签云、热门/最近文章"""
+        return dict(nav_categories=query_nav_categories(),
+                    tag_cloud=query_tag_cloud(),
+                    recent_posts=query_recent_posts(),
+                    top_posts=query_top_posts())
 
     @app.errorhandler(404)
     def not_found(e):
@@ -284,6 +331,7 @@ def create_app():
     return app
 
 
+# 模块级 app 实例：flask CLI（flask run）通过它发现应用；脚本启动走 __main__
 app = create_app()
 
 if __name__ == '__main__':

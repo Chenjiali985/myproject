@@ -21,18 +21,19 @@ def get_or_create(model, **kwargs):
     return obj
 
 
+class Category(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    posts = db.relationship('Post', backref=db.backref('category'),
+                            lazy='dynamic')
+
+
 # 文章 ↔ 标签 多对多关联表（数据库表名保持 post_tags 不变，兼容已有 blog.db）
 post_tag_table = db.Table(
     'post_tags',
     db.Column('post_id', db.Integer, db.ForeignKey('post.id'), primary_key=True),
     db.Column('tag_id', db.Integer, db.ForeignKey('tag.id'), primary_key=True),
 )
-
-
-class Category(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    posts = db.relationship('Post', backref='category', lazy='dynamic')
 
 
 class Tag(db.Model):
@@ -55,7 +56,7 @@ class Post(db.Model):
     views = db.Column(db.Integer, default=0, nullable=False)
     published = db.Column(db.Boolean, default=True, nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
-    comments = db.relationship('Comment', backref='post',
+    comments = db.relationship('Comment', backref=db.backref('post'),
                                cascade='all, delete-orphan', lazy='dynamic')
 
     @property

@@ -30,7 +30,7 @@
         <td>{{ post.created_at.strftime('%Y-%m-%d') }}</td>
         <td class="actions">
           <a href="{{ url_for('post_edit', post_id=post.id) }}">编辑</a>
-          <form class="inline" method="post" action="{{ url_for('post_toggle', post_id=post.id) }}">
+          <form class="inline" method="post" action="{{ url_for('toggle_post_publish', post_id=post.id) }}">
             <button class="link" type="submit">{{ '下线' if post.published else '发布' }}</button>
           </form>
           <form class="inline" method="post" action="{{ url_for('post_delete', post_id=post.id) }}"
