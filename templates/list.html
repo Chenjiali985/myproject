@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% from 'pagination.html' import render_pagination %}
+
+{% block content %}
+{% if request.endpoint == 'index' %}
+<img class="home-banner" src="{{ url_for('static', filename='assets/banner.png') }}" alt="记录技术，沉淀思考">
+{% endif %}
+<div class="page-head">
+  <h1>{{ title }}</h1>
+  {% if subtitle %}<p class="muted">{{ subtitle }}</p>{% endif %}
+</div>
+
+{% for post in posts %}
+<article class="card post-card">
+  <div class="post-card-head">
+    <h2><a href="{{ url_for('post_detail', slug=post.slug) }}">{{ post.title }}</a></h2>
+    {% if post.category %}
+    <a class="badge" href="{{ url_for('category', name=post.category.name) }}">{{ post.category.name }}</a>
+    {% endif %}
+  </div>
+  <div class="post-meta">
+    <span>📅 {{ post.created_at.strftime('%Y-%m-%d') }}</span>
+    <span>👁 {{ post.views }} 次阅读</span>
+    <span>💬 {{ post.comments.count() }} 条评论</span>
+  </div>
+  {% if post.summary %}<p class="post-summary">{{ post.summary }}</p>{% endif %}
+  <div class="post-tags">
+    {% for tag in post.tags %}
+    <a class="tag" href="{{ url_for('tag', name=tag.name) }}">#{{ tag.name }}</a>
+    {% endfor %}
+  </div>
+  <a class="read-more" href="{{ url_for('post_detail', slug=post.slug) }}">阅读全文 →</a>
+</article>
+{% else %}
+<div class="card empty">没有找到文章。</div>
+{% endfor %}
+
+{{ render_pagination(pagination, endpoint, kwargs or {}) }}
+{% endblock %}

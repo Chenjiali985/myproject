@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ title }}</h1>
+  <p class="muted">共 {{ total }} 篇文章</p>
+</div>
+
+{% for (year, month), posts in archive_data %}
+<section class="card archive-group">
+  <h2>{{ year }} 年 {{ month }} 月 <small class="muted">（{{ posts | length }} 篇）</small></h2>
+  <ul class="archive-list">
+    {% for post in posts %}
+    <li>
+      <span class="archive-date">{{ post.created_at.strftime('%m-%d') }}</span>
+      <a href="{{ url_for('post_detail', slug=post.slug) }}">{{ post.title }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% else %}
+<div class="card empty">暂无文章。</div>
+{% endfor %}
+{% endblock %}

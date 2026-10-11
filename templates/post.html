@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<article class="post-full">
+  <header class="card post-full-head">
+    <h1>{{ post.title }}</h1>
+    <div class="post-meta">
+      <span>📅 {{ post.created_at.strftime('%Y-%m-%d') }}</span>
+      {% if post.category %}<a class="badge" href="{{ url_for('category', name=post.category.name) }}">{{ post.category.name }}</a>{% endif %}
+      <span>👁 {{ post.views }} 次阅读</span>
+    </div>
+    {% if post.tags %}
+    <div class="post-tags">
+      {% for tag in post.tags %}
+      <a class="tag" href="{{ url_for('tag', name=tag.name) }}">#{{ tag.name }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </header>
+
+  <div class="card markdown-body">
+    {{ post.html | safe }}
+  </div>
+
+  <section id="comments" class="card comments">
+    <h2>评论（{{ comments | length }}）</h2>
+    {% for c in comments %}
+    <div class="comment">
+      <div class="comment-head">
+        <strong>{{ c.name }}</strong>
+        <span class="muted">{{ c.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+      </div>
+      <p>{{ c.content }}</p>
+    </div>
+    {% else %}
+    <p class="muted">还没有评论，来说两句吧～</p>
+    {% endfor %}
+
+    <form method="post" action="{{ url_for('add_comment', post_id=post.id) }}" class="comment-form">
+      <h3>发表评论</h3>
+      <input name="name" placeholder="昵称" required maxlength="30">
+      <textarea name="content" rows="4" placeholder="写下你的评论..." required maxlength="1000"></textarea>
+      <button type="submit" class="btn">发表评论</button>
+    </form>
+  </section>
+
+  <div class="post-nav">
+    <a href="{{ url_for('index') }}">← 返回首页</a>
+  </div>
+</article>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="admin-head">
+  <h1>{{ title }}</h1>
+  <a class="btn ghost" href="{{ url_for('admin_dashboard') }}">← 返回列表</a>
+</div>
+
+<form method="post" class="card admin-form">
+  <label>标题
+    <input name="title" required value="{{ post.title if post else '' }}" placeholder="文章标题">
+  </label>
+
+  <label>固定链接 slug（留空自动生成）
+    <input name="slug" value="{{ post.slug if post else '' }}" placeholder="例如 python-tips">
+  </label>
+
+  <label>摘要（显示在文章列表）
+    <textarea name="summary" rows="2" placeholder="一句话概括这篇文章">{{ post.summary if post else '' }}</textarea>
+  </label>
+
+  <div class="form-row">
+    <label>分类
+      <select name="category_id">
+        <option value="">未分类</option>
+        {% for c in categories %}
+        <option value="{{ c.id }}" {{ 'selected' if post and post.category_id == c.id }}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>或新建分类（优先使用）
+      <input name="new_category" placeholder="输入名称则忽略上方选择">
+    </label>
+  </div>
+
+  <label>标签（用逗号分隔）
+    <input name="tags" value="{{ post.tags | map(attribute='name') | join(', ') if post else '' }}" placeholder="Python, Flask">
+  </label>
+
+  <label>内容（支持 Markdown 语法）
+    <textarea name="content" rows="18" class="code" required
+      placeholder="# 标题&#10;&#10;正文...&#10;&#10;```python&#10;print('hello')&#10;```">{{ post.content if post else '' }}</textarea>
+  </label>
+
+  <label class="checkbox">
+    <input type="checkbox" name="published" {{ 'checked' if not post or post.published }}>
+    立即发布（取消勾选则保存为草稿）
+  </label>
+
+  <button type="submit" class="btn full">保 存</button>
+</form>
+{% endblock %}

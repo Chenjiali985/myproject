@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-head">
+  <h1>{{ title }}</h1>
+</div>
+
+<div class="card markdown-body about-page">
+  <p>你好，欢迎来到 <strong>BoKe</strong> 👋</p>
+  <p>我是一名热爱 <strong>Python</strong> 与 <strong>Web 开发</strong> 的工程师。这个博客用来记录：</p>
+  <ul>
+    <li>学习新技术时的笔记与踩坑经验</li>
+    <li>日常开发中沉淀的最佳实践</li>
+    <li>对工具、效率与工程化的思考</li>
+  </ul>
+  <h2>关于本站</h2>
+  <p>本站使用 <a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener">Flask</a> + SQLite + Markdown 构建，
+  前端为原生 HTML/CSS/JS，没有引入任何前端框架——够用就好。</p>
+  <blockquote>
+    <p>“把学到的东西写出来，是检验自己是否真正理解的最好方式。”</p>
+  </blockquote>
+  <h2>联系我</h2>
+  <p>如果你对文章内容有任何建议或想法，欢迎在文章下方留言评论。</p>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="admin-head">
+  <h1>{{ title }}</h1>
+  <a class="btn" href="{{ url_for('post_new') }}">+ 写新文章</a>
+</div>
+
+<div class="card table-card">
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>标题</th>
+        <th>分类</th>
+        <th>状态</th>
+        <th>浏览</th>
+        <th>评论</th>
+        <th>日期</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for post in posts %}
+      <tr>
+        <td><a href="{{ url_for('post_detail', slug=post.slug) }}" target="_blank">{{ post.title }}</a></td>
+        <td>{{ post.category.name if post.category else '—' }}</td>
+        <td><span class="status {{ 'on' if post.published }}">{{ '已发布' if post.published else '草稿' }}</span></td>
+        <td>{{ post.views }}</td>
+        <td>{{ post.comments.count() }}</td>
+        <td>{{ post.created_at.strftime('%Y-%m-%d') }}</td>
+        <td class="actions">
+          <a href="{{ url_for('post_edit', post_id=post.id) }}">编辑</a>
+          <form class="inline" method="post" action="{{ url_for('post_toggle', post_id=post.id) }}">
+            <button class="link" type="submit">{{ '下线' if post.published else '发布' }}</button>
+          </form>
+          <form class="inline" method="post" action="{{ url_for('post_delete', post_id=post.id) }}"
+                onsubmit="return confirm('确定删除《{{ post.title }}》？该操作不可恢复。')">
+            <button class="link danger" type="submit">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted">还没有文章，点击右上角开始写作。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
